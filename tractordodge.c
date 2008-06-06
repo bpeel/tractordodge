@@ -6,6 +6,8 @@
 #define LINE_HEIGHT 30
 #define LINE_GAP    20
 
+#define CAR_MAX_ANGLE 25
+
 typedef struct _LineCallbackData LineCallbackData;
 
 struct _LineCallbackData
@@ -24,6 +26,89 @@ struct _AddTractorData
   int tractor_size, road_width, road_left;
   int road_start, road_end;
 };
+
+typedef struct _CarData CarData;
+
+struct _CarData
+{
+  ClutterActor *car;
+  float angle;
+  int rotate_direction;
+};
+
+#define ROTATE_SPEED     100 /* Degrees per second */
+#define STRAIGHTEN_SPEED 20
+
+static void
+on_car_rotate_frame (ClutterTimeline *tl, int frame_num, CarData *data)
+{
+  guint delta = clutter_timeline_get_delta (tl, NULL);
+  guint speed = clutter_timeline_get_speed (tl);
+
+  if (data->rotate_direction < 0)
+    {
+      data->angle -= delta * ROTATE_SPEED / (float) speed;
+
+      if (data->angle < -CAR_MAX_ANGLE)
+	data->angle = -CAR_MAX_ANGLE;
+    }
+  else if (data->rotate_direction == 0)
+    {
+      float diff = delta * STRAIGHTEN_SPEED / (float) speed;
+
+      if (data->angle < 0)
+	{
+	  data->angle += diff;
+	  if (data->angle > 0)
+	    data->angle = 0;
+	}
+      else if (data->angle > 0)
+	{
+	  data->angle -= diff;
+	  if (data->angle < 0)
+	    data->angle = 0;
+	}
+    }
+  else
+    {
+      data->angle += delta * ROTATE_SPEED / (float) speed;
+
+      if (data->angle > CAR_MAX_ANGLE)
+	data->angle = CAR_MAX_ANGLE;
+    }
+
+  clutter_actor_set_rotation (data->car, CLUTTER_Z_AXIS, data->angle,
+			      clutter_actor_get_width (data->car) / 2,
+			      clutter_actor_get_height (data->car) / 2,
+			      0);
+}
+
+static void
+on_key_press (ClutterActor *stage, ClutterKeyEvent *event, CarData *data)
+{
+  switch (event->keyval)
+    {
+    case CLUTTER_Left:
+      data->rotate_direction = -1;
+      break;
+
+    case CLUTTER_Right:
+      data->rotate_direction = 1;
+      break;
+    }
+}
+
+static void
+on_key_release (ClutterActor *stage, ClutterKeyEvent *event, CarData *data)
+{
+  switch (event->keyval)
+    {
+    case CLUTTER_Left:
+    case CLUTTER_Right:
+      data->rotate_direction = 0;
+      break;
+    }
+}
 
 static void
 destroy_line_callback_data (gpointer data, GClosure *closure)
@@ -171,14 +256,18 @@ main (int argc, char **argv)
   static const ClutterColor grass_color = { 0x10, 0xa0, 0x00, 0xff };
   static const ClutterColor road_color = { 0x60, 0x60, 0x60, 0xff };
   int stage_width, stage_height;
-  ClutterTimeline *line_tl;
+  ClutterTimeline *line_tl, *car_rotate_tl;
   AddTractorData tractor_data;
-  ClutterMD2Data *car_data;
+  ClutterMD2Data *car_md2_data;
   int car_size, road_length;
+  CarData car_data;
 
   clutter_init (&argc, &argv);
 
   stage = clutter_stage_get_default ();
+
+  if (getenv ("FULLSCREEN"))
+    clutter_stage_fullscreen (CLUTTER_STAGE (stage));
 
   stage_width = clutter_actor_get_width (stage);
   stage_height = clutter_actor_get_height (stage);
@@ -218,10 +307,10 @@ main (int argc, char **argv)
 
   add_tractor (&tractor_data);
 
-  car_data = get_data ("data/car/car.md2");
+  car_md2_data = get_data ("data/car/car.md2");
   car = clutter_md2_new ();
-  clutter_md2_set_data (CLUTTER_MD2 (car), car_data);
-  g_object_unref (car_data);
+  clutter_md2_set_data (CLUTTER_MD2 (car), car_md2_data);
+  g_object_unref (car_md2_data);
 
   car_size = tractor_data.tractor_size * 3 / 4;
   clutter_actor_set_position (car, stage_width / 2 - car_size / 2,
@@ -231,6 +320,19 @@ main (int argc, char **argv)
 
   g_signal_connect (stage, "motion-event", G_CALLBACK (on_motion), car);
 
+  car_data.car = car;
+  car_data.angle = 0;
+  car_data.rotate_direction = 0;
+  g_signal_connect (stage, "key-press-event",
+		    G_CALLBACK (on_key_press), &car_data);
+  g_signal_connect (stage, "key-release-event",
+		    G_CALLBACK (on_key_release), &car_data);
+  car_rotate_tl = clutter_timeline_new_for_duration (1000);
+  clutter_timeline_set_loop (car_rotate_tl, TRUE);
+  clutter_timeline_start (car_rotate_tl);
+  g_signal_connect (car_rotate_tl, "new-frame",
+		    G_CALLBACK (on_car_rotate_frame), &car_data);
+
   clutter_actor_show (stage);
 
   clutter_main ();
@@ -238,6 +340,7 @@ main (int argc, char **argv)
   /* Remove all add tractor sources */
   while (g_source_remove_by_user_data (&tractor_data));
 
+  g_object_unref (car_rotate_tl);
   g_object_unref (tractor_data.eft);
   g_object_unref (tractor_data.tractor_data);
   g_object_unref (line_tl);

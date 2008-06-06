@@ -1,5 +1,31 @@
+/*
+ * tractordodge
+ *
+ * A sample game for the ClutterMD2 renderer
+ *
+ * Authored By Neil Roberts  <neil@o-hand.com>
+ *
+ * Copyright (C) 2008 OpenedHand
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; either version 2 of the
+ * License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this library; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ */
+
 #include <clutter/clutter.h>
 #include <clutter-md2/clutter-md2.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <stdlib.h>
 
 #define LINE_WIDTH  15
@@ -116,6 +142,28 @@ on_key_press (ClutterActor *stage, ClutterKeyEvent *event, CarData *data)
     case CLUTTER_Right:
       data->rotate_direction = 1;
       break;
+
+    case CLUTTER_s:
+      {
+	int width = clutter_actor_get_width (stage);
+	int height = clutter_actor_get_height (stage);
+	guchar *data = clutter_stage_read_pixels (CLUTTER_STAGE (stage),
+						  0, 0, width, height);
+	guchar *p;
+	GdkPixbuf *pb;
+
+	for (p = data + width * height * 4; p > data; p -= 3)
+	  *(--p) = 0xff;
+
+	pb = gdk_pixbuf_new_from_data (data, GDK_COLORSPACE_RGB, TRUE,
+				       8, width, height, width * 4,
+				       (GdkPixbufDestroyNotify) g_free,
+				       NULL);
+
+	gdk_pixbuf_save (pb, "screenie.png", "png", NULL, NULL);
+
+	g_object_unref (pb);
+      }
     }
 }
 

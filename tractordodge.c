@@ -34,10 +34,14 @@ struct _CarData
   ClutterActor *car;
   float angle;
   int rotate_direction;
+  float position;
+  int stage_width;
 };
 
-#define ROTATE_SPEED     100 /* Degrees per second */
+#define ROTATE_SPEED     80 /* Degrees per second */
 #define STRAIGHTEN_SPEED 20
+
+#define FULL_MOVE_SPEED  0.5 /* stage widths per second */
 
 static void
 on_car_rotate_frame (ClutterTimeline *tl, int frame_num, CarData *data)
@@ -81,6 +85,23 @@ on_car_rotate_frame (ClutterTimeline *tl, int frame_num, CarData *data)
 			      clutter_actor_get_width (data->car) / 2,
 			      clutter_actor_get_height (data->car) / 2,
 			      0);
+
+  if (data->angle != 0)
+    {
+      float slide_speed = data->angle * (float) FULL_MOVE_SPEED / CAR_MAX_ANGLE;
+      float offset = delta * slide_speed / speed * data->stage_width;
+
+      data->position += offset;
+
+      if (data->position < 0.0f)
+	data->position = 0.0f;
+      else if (data->position > data->stage_width)
+	data->position = data->stage_width;
+      
+      clutter_actor_set_x (data->car,
+			   data->position
+			   - clutter_actor_get_width (data->car) / 2);
+    }
 }
 
 static void
@@ -313,6 +334,9 @@ main (int argc, char **argv)
   car_data.car = car;
   car_data.angle = 0;
   car_data.rotate_direction = 0;
+  car_data.position = stage_width / 2.0f;
+  car_data.stage_width = stage_width;
+
   g_signal_connect (stage, "key-press-event",
 		    G_CALLBACK (on_key_press), &car_data);
   g_signal_connect (stage, "key-release-event",

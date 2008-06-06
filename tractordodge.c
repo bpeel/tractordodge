@@ -4,13 +4,13 @@
 
 #define LINE_WIDTH  15
 #define LINE_HEIGHT 30
-#define LINE_GAP    15
+#define LINE_GAP    20
 
 typedef struct _LineCallbackData LineCallbackData;
 
 struct _LineCallbackData
 {
-  int y_offset, stage_height;
+  int y_offset, road_start, road_end;
   ClutterActor *line;
 };
 
@@ -19,9 +19,10 @@ typedef struct _AddTractorData AddTractorData;
 struct _AddTractorData
 {
   ClutterEffectTemplate *eft;
-  ClutterActor *stage;
+  ClutterActor *group;
   ClutterMD2Data *tractor_data;
-  int tractor_size, road_width, road_left, stage_height;
+  int tractor_size, road_width, road_left;
+  int road_start, road_end;
 };
 
 static void
@@ -38,30 +39,30 @@ on_new_frame_for_line (ClutterTimeline *tl,
   int num_frames = clutter_timeline_get_n_frames (tl);
 
   clutter_actor_set_y (data->line,
-		       (data->y_offset + (frame_num * data->stage_height
-					  / num_frames))
-		       % data->stage_height
-		       - LINE_HEIGHT - LINE_GAP);
+		       (data->y_offset
+			- data->road_start
+			+ (frame_num * (data->road_end - data->road_start)
+			   / num_frames))
+		       % (data->road_end - data->road_start)
+		       - LINE_HEIGHT - LINE_GAP + data->road_start);
 }
 
 static ClutterTimeline *
-make_line_animation (ClutterActor *stage)
+make_line_animation (ClutterActor *group, int stage_width,
+		     int road_start, int road_end)
 {
-  int stage_width = clutter_actor_get_width (stage);
-  int stage_height = clutter_actor_get_height (stage);
-  int ypos = 0;
+  int ypos = road_start;
   ClutterTimeline *tl;
   static const ClutterColor line_color = { 0xe0, 0xe0, 0x00, 0xff };
 
-  tl = clutter_timeline_new_for_duration (2000);
+  tl = clutter_timeline_new_for_duration (4000);
 
-  /* Expand the stage height to be a multiple of the distance between
-     lines */
-  stage_height += ((LINE_HEIGHT + LINE_GAP - 1)
-		   - stage_height % (LINE_HEIGHT + LINE_GAP))
+  /* Extend the road to be a multiple of the distance between lines */
+  road_end += ((LINE_HEIGHT + LINE_GAP - 1)
+	       - (road_end - road_start) % (LINE_HEIGHT + LINE_GAP))
     + LINE_HEIGHT + LINE_GAP;
 
-  while (ypos < stage_height)
+  while (ypos < road_end)
     {
       ClutterActor *line = clutter_rectangle_new_with_color (&line_color);
       LineCallbackData *data;
@@ -70,11 +71,12 @@ make_line_animation (ClutterActor *stage)
 				  ypos - LINE_HEIGHT - LINE_GAP);
       clutter_actor_set_size (line, LINE_WIDTH, LINE_HEIGHT);
       
-      clutter_container_add (CLUTTER_CONTAINER (stage), line, NULL);
+      clutter_container_add (CLUTTER_CONTAINER (group), line, NULL);
 
       data = g_slice_new (LineCallbackData);
       data->y_offset = ypos;
-      data->stage_height = stage_height;
+      data->road_start = road_start;
+      data->road_end = road_end;
       data->line = line;
 
       g_signal_connect_data (tl, "new-frame",
@@ -136,14 +138,15 @@ add_tractor (gpointer user_data)
   clutter_actor_set_size (tractor, data->tractor_size, data->tractor_size);
 
   xpos = rand () % data->road_width + data->road_left;
-  clutter_actor_set_position (tractor, xpos, -data->tractor_size);
-  clutter_container_add (CLUTTER_CONTAINER (data->stage), tractor, NULL);
+  clutter_actor_set_position (tractor, xpos, data->road_start
+			      - data->tractor_size);
+  clutter_container_add (CLUTTER_CONTAINER (data->group), tractor, NULL);
 
   num_skins = clutter_md2_get_n_skins (CLUTTER_MD2 (tractor));
   clutter_md2_set_current_skin (CLUTTER_MD2 (tractor),
 				rand () % num_skins);
 
-  clutter_effect_move (data->eft, tractor, xpos, data->stage_height,
+  clutter_effect_move (data->eft, tractor, xpos, data->road_end,
 		       (ClutterEffectCompleteFunc) clutter_actor_destroy,
 		       tractor);
 
@@ -164,31 +167,38 @@ on_motion (ClutterActor *stage, ClutterButtonEvent *event, ClutterActor *car)
 int
 main (int argc, char **argv)
 {
-  ClutterActor *stage, *road, *car;
-  static const ClutterColor grass_color = { 0x10, 0xe0, 0x00, 0xff };
+  ClutterActor *stage, *group, *road, *car;
+  static const ClutterColor grass_color = { 0x10, 0xa0, 0x00, 0xff };
   static const ClutterColor road_color = { 0x60, 0x60, 0x60, 0xff };
   int stage_width, stage_height;
   ClutterTimeline *line_tl;
   AddTractorData tractor_data;
   ClutterMD2Data *car_data;
-  int car_size;
+  int car_size, road_length;
 
   clutter_init (&argc, &argv);
 
   stage = clutter_stage_get_default ();
-  
+
   stage_width = clutter_actor_get_width (stage);
   stage_height = clutter_actor_get_height (stage);
+  road_length = stage_height * 3;
+
+  group = clutter_group_new ();
+  clutter_container_add (CLUTTER_CONTAINER (stage), group, NULL);
+  clutter_actor_set_rotation (group, CLUTTER_X_AXIS, 45, 0, stage_height, 0);
 
   clutter_stage_set_color (CLUTTER_STAGE (stage), &grass_color);
 
   road = clutter_rectangle_new_with_color (&road_color);
-  clutter_actor_set_position (road, stage_width / 8, 0);
-  clutter_actor_set_size (road, stage_width * 3 / 4, stage_height);
+  clutter_actor_set_position (road, stage_width / 8,
+			      stage_height - road_length);
+  clutter_actor_set_size (road, stage_width * 3 / 4, road_length);
   
-  clutter_container_add (CLUTTER_CONTAINER (stage), road, NULL);
+  clutter_container_add (CLUTTER_CONTAINER (group), road, NULL);
 
-  line_tl = make_line_animation (stage);
+  line_tl = make_line_animation (group, stage_width, stage_height - road_length,
+				 stage_height);
 
   clutter_timeline_set_loop (line_tl, TRUE);
   clutter_timeline_start (line_tl);
@@ -202,8 +212,9 @@ main (int argc, char **argv)
   tractor_data.tractor_size = stage_width * 3 / 16;
   tractor_data.road_width = clutter_actor_get_width (road);
   tractor_data.road_left = clutter_actor_get_x (road);
-  tractor_data.stage_height = stage_height;
-  tractor_data.stage = stage;
+  tractor_data.road_start = stage_height - road_length;
+  tractor_data.road_end = stage_height;
+  tractor_data.group = group;
 
   add_tractor (&tractor_data);
 
@@ -216,7 +227,7 @@ main (int argc, char **argv)
   clutter_actor_set_position (car, stage_width / 2 - car_size / 2,
 			      stage_height - car_size * 4 / 3);
   clutter_actor_set_size (car, car_size, car_size);
-  clutter_container_add (CLUTTER_CONTAINER (stage), car, NULL);
+  clutter_container_add (CLUTTER_CONTAINER (group), car, NULL);
 
   g_signal_connect (stage, "motion-event", G_CALLBACK (on_motion), car);
 

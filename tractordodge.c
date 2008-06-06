@@ -241,14 +241,6 @@ add_tractor (gpointer user_data)
   return FALSE;
 }
 
-static gboolean
-on_motion (ClutterActor *stage, ClutterButtonEvent *event, ClutterActor *car)
-{
-  clutter_actor_set_x (car, event->x - clutter_actor_get_width (car) / 2);
-
-  return FALSE;
-}
-
 int
 main (int argc, char **argv)
 {
@@ -317,8 +309,6 @@ main (int argc, char **argv)
 			      stage_height - car_size * 4 / 3);
   clutter_actor_set_size (car, car_size, car_size);
   clutter_container_add (CLUTTER_CONTAINER (group), car, NULL);
-
-  g_signal_connect (stage, "motion-event", G_CALLBACK (on_motion), car);
 
   car_data.car = car;
   car_data.angle = 0;

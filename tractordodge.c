@@ -28,11 +28,14 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <stdlib.h>
 
-#define LINE_WIDTH  15
-#define LINE_HEIGHT 30
-#define LINE_GAP    20
+#define LINE_WIDTH         15
+#define LINE_HEIGHT        30
+#define LINE_GAP           20
 
-#define CAR_MAX_ANGLE 25
+#define CAR_MAX_ANGLE      25
+
+#define TRACTOR_RATE_MIN   1
+#define TRACTOR_RATE_START 10
 
 typedef struct _LineCallbackData LineCallbackData;
 
@@ -42,21 +45,17 @@ struct _LineCallbackData
   ClutterActor *line;
 };
 
-typedef struct _AddTractorData AddTractorData;
+typedef struct _GameData GameData;
 
-struct _AddTractorData
+struct _GameData
 {
   ClutterEffectTemplate *eft;
   ClutterActor *group;
   ClutterMD2Data *tractor_data;
   int tractor_size, road_width, road_left;
   int road_start, road_end;
-};
+  int add_rate;
 
-typedef struct _CarData CarData;
-
-struct _CarData
-{
   ClutterActor *car;
   float angle;
   int rotate_direction;
@@ -70,7 +69,7 @@ struct _CarData
 #define FULL_MOVE_SPEED  0.5 /* stage widths per second */
 
 static void
-on_car_rotate_frame (ClutterTimeline *tl, int frame_num, CarData *data)
+on_car_rotate_frame (ClutterTimeline *tl, int frame_num, GameData *data)
 {
   guint delta = clutter_timeline_get_delta (tl, NULL);
   guint speed = clutter_timeline_get_speed (tl);
@@ -131,7 +130,7 @@ on_car_rotate_frame (ClutterTimeline *tl, int frame_num, CarData *data)
 }
 
 static void
-on_key_press (ClutterActor *stage, ClutterKeyEvent *event, CarData *data)
+on_key_press (ClutterActor *stage, ClutterKeyEvent *event, GameData *data)
 {
   switch (event->keyval)
     {
@@ -168,7 +167,7 @@ on_key_press (ClutterActor *stage, ClutterKeyEvent *event, CarData *data)
 }
 
 static void
-on_key_release (ClutterActor *stage, ClutterKeyEvent *event, CarData *data)
+on_key_release (ClutterActor *stage, ClutterKeyEvent *event, GameData *data)
 {
   switch (event->keyval)
     {
@@ -277,7 +276,7 @@ add_skin (ClutterMD2Data *data, const char *filename)
 static gboolean
 add_tractor (gpointer user_data)
 {
-  AddTractorData *data = (AddTractorData *) user_data;
+  GameData *data = (GameData *) user_data;
   ClutterActor *tractor;
   int xpos;
   int num_skins;
@@ -305,7 +304,11 @@ add_tractor (gpointer user_data)
 		       tractor);
 
   /* Start another tractor some time later */
-  g_timeout_add_seconds (rand () % 9 + 1, add_tractor, user_data);
+  g_timeout_add_seconds (rand () % (data->add_rate - TRACTOR_RATE_MIN + 1)
+			 + TRACTOR_RATE_MIN, add_tractor, user_data);
+  /* Increase the rate for the next tractor */
+  if (data->add_rate > TRACTOR_RATE_MIN)
+    data->add_rate--;
 
   return FALSE;
 }
@@ -318,10 +321,9 @@ main (int argc, char **argv)
   static const ClutterColor road_color = { 0x60, 0x60, 0x60, 0xff };
   int stage_width, stage_height;
   ClutterTimeline *line_tl, *car_rotate_tl;
-  AddTractorData tractor_data;
   ClutterMD2Data *car_md2_data;
   int car_size, road_length;
-  CarData car_data;
+  GameData game_data;
 
   clutter_init (&argc, &argv);
 
@@ -353,58 +355,59 @@ main (int argc, char **argv)
   clutter_timeline_set_loop (line_tl, TRUE);
   clutter_timeline_start (line_tl);
 
-  tractor_data.tractor_data = get_data ("data/tractor/tractor.md2");
-  add_skin (tractor_data.tractor_data, "data/tractor/tractor_red.pcx");
+  game_data.tractor_data = get_data ("data/tractor/tractor.md2");
+  add_skin (game_data.tractor_data, "data/tractor/tractor_red.pcx");
 
-  tractor_data.eft
+  game_data.eft
     = clutter_effect_template_new_for_duration (10000, CLUTTER_ALPHA_SINE_INC);
 
-  tractor_data.tractor_size = stage_width * 3 / 16;
-  tractor_data.road_width = clutter_actor_get_width (road);
-  tractor_data.road_left = clutter_actor_get_x (road);
-  tractor_data.road_start = stage_height - road_length;
-  tractor_data.road_end = stage_height;
-  tractor_data.group = group;
+  game_data.tractor_size = stage_width * 3 / 16;
+  game_data.road_width = clutter_actor_get_width (road);
+  game_data.road_left = clutter_actor_get_x (road);
+  game_data.road_start = stage_height - road_length;
+  game_data.road_end = stage_height;
+  game_data.group = group;
+  game_data.add_rate = TRACTOR_RATE_START;
 
-  add_tractor (&tractor_data);
+  add_tractor (&game_data);
 
   car_md2_data = get_data ("data/car/car.md2");
   car = clutter_md2_new ();
   clutter_md2_set_data (CLUTTER_MD2 (car), car_md2_data);
   g_object_unref (car_md2_data);
 
-  car_size = tractor_data.tractor_size * 3 / 4;
+  car_size = game_data.tractor_size * 3 / 4;
   clutter_actor_set_position (car, stage_width / 2 - car_size / 2,
 			      stage_height - car_size * 4 / 3);
   clutter_actor_set_size (car, car_size, car_size);
   clutter_container_add (CLUTTER_CONTAINER (group), car, NULL);
 
-  car_data.car = car;
-  car_data.angle = 0;
-  car_data.rotate_direction = 0;
-  car_data.position = stage_width / 2.0f;
-  car_data.stage_width = stage_width;
+  game_data.car = car;
+  game_data.angle = 0;
+  game_data.rotate_direction = 0;
+  game_data.position = stage_width / 2.0f;
+  game_data.stage_width = stage_width;
 
   g_signal_connect (stage, "key-press-event",
-		    G_CALLBACK (on_key_press), &car_data);
+		    G_CALLBACK (on_key_press), &game_data);
   g_signal_connect (stage, "key-release-event",
-		    G_CALLBACK (on_key_release), &car_data);
+		    G_CALLBACK (on_key_release), &game_data);
   car_rotate_tl = clutter_timeline_new_for_duration (1000);
   clutter_timeline_set_loop (car_rotate_tl, TRUE);
   clutter_timeline_start (car_rotate_tl);
   g_signal_connect (car_rotate_tl, "new-frame",
-		    G_CALLBACK (on_car_rotate_frame), &car_data);
+		    G_CALLBACK (on_car_rotate_frame), &game_data);
 
   clutter_actor_show (stage);
 
   clutter_main ();
 
   /* Remove all add tractor sources */
-  while (g_source_remove_by_user_data (&tractor_data));
+  while (g_source_remove_by_user_data (&game_data));
 
   g_object_unref (car_rotate_tl);
-  g_object_unref (tractor_data.eft);
-  g_object_unref (tractor_data.tractor_data);
+  g_object_unref (game_data.eft);
+  g_object_unref (game_data.tractor_data);
   g_object_unref (line_tl);
 
   return 0;

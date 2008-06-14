@@ -28,6 +28,9 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <stdlib.h>
 
+#include "tdnumber.h"
+#include "tdcornerlayout.h"
+
 #define LINE_WIDTH         15
 #define LINE_HEIGHT        30
 #define LINE_GAP           20
@@ -61,6 +64,9 @@ struct _GameData
   int rotate_direction;
   float position;
   int stage_width;
+
+  ClutterActor *number;
+  int score;
 };
 
 #define ROTATE_SPEED     80 /* Degrees per second */
@@ -310,13 +316,16 @@ add_tractor (gpointer user_data)
   if (data->add_rate > TRACTOR_RATE_MIN)
     data->add_rate--;
 
+  /* Increase the player's score */
+  td_number_set_value (TD_NUMBER (data->number), ++data->score);
+
   return FALSE;
 }
 
 int
 main (int argc, char **argv)
 {
-  ClutterActor *stage, *group, *road, *car;
+  ClutterActor *stage, *group, *road, *car, *number_layout;
   static const ClutterColor grass_color = { 0x10, 0xa0, 0x00, 0xff };
   static const ClutterColor road_color = { 0x60, 0x60, 0x60, 0xff };
   int stage_width, stage_height;
@@ -369,8 +378,6 @@ main (int argc, char **argv)
   game_data.group = group;
   game_data.add_rate = TRACTOR_RATE_START;
 
-  add_tractor (&game_data);
-
   car_md2_data = get_data ("data/car/car.md2");
   car = clutter_md2_new ();
   clutter_md2_set_data (CLUTTER_MD2 (car), car_md2_data);
@@ -387,6 +394,19 @@ main (int argc, char **argv)
   game_data.rotate_direction = 0;
   game_data.position = stage_width / 2.0f;
   game_data.stage_width = stage_width;
+
+  number_layout = td_corner_layout_new ();
+  clutter_actor_set_size (number_layout, stage_width, stage_height);
+
+  game_data.number = td_number_new ();
+  td_number_set_value (TD_NUMBER (game_data.number), game_data.score = 0);
+
+  clutter_container_add (CLUTTER_CONTAINER (number_layout),
+			 game_data.number, NULL);
+
+  clutter_container_add (CLUTTER_CONTAINER (stage), number_layout, NULL);
+
+  add_tractor (&game_data);
 
   g_signal_connect (stage, "key-press-event",
 		    G_CALLBACK (on_key_press), &game_data);

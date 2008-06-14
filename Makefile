@@ -1,7 +1,7 @@
-DEPS=clutter-0.7 clutter-md2-0.1
+DEPS=clutter-0.7 clutter-md2-0.1 cairo
 LDFLAGS=`pkg-config $(DEPS) --libs`
 CFLAGS=`pkg-config $(DEPS) --cflags` -g -Wall
-OBJS=tractordodge.o
+OBJS=tractordodge.o tdnumber.o tdcornerlayout.o
 
 all : tractordodge
 

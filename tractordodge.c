@@ -365,7 +365,7 @@ main (int argc, char **argv)
   clutter_timeline_start (line_tl);
 
   game_data.tractor_data = get_data ("data/tractor/tractor.md2");
-  add_skin (game_data.tractor_data, "data/tractor/tractor_red.pcx");
+  add_skin (game_data.tractor_data, "data/tractor/tractor_red.png");
 
   game_data.eft
     = clutter_effect_template_new_for_duration (10000, CLUTTER_ALPHA_SINE_INC);

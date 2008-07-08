@@ -293,6 +293,8 @@ td_number_dispose (GObject *self)
       cogl_texture_unref (priv->tex);
       priv->tex = COGL_INVALID_HANDLE;
     }
+
+  G_OBJECT_CLASS (td_number_parent_class)->dispose (self);
 }
 
 static void
